@@ -1,0 +1,83 @@
+FROM ubuntu:latest
+
+# update
+RUN apt-get -y update && apt-get install -y \
+sudo \
+wget \
+vim
+
+#install anaconda3
+WORKDIR /opt
+# download anaconda package and install anaconda
+# archive -> https://repo.continuum.io/archive/
+RUN wget https://repo.continuum.io/archive/Anaconda3-2019.10-Linux-x86_64.sh && \
+sh /opt/Anaconda3-2019.10-Linux-x86_64.sh -b -p /opt/anaconda3 && \
+rm -f Anaconda3-2019.10-Linux-x86_64.sh
+# set path
+
+# update pip and conda
+RUN pip install --upgrade pip
+
+
+
+
+# CMD conda install -c conda-forge pandas-profiling
+
+
+WORKDIR /
+RUN mkdir /work
+
+# execute jupyterlab as a default command
+CMD ["jupyter", "lab", "--ip=0.0.0.0", "--allow-root", "--LabApp.token=''"]
+
+# continuumio/anaconda3の最新版をPullする。
+FROM continuumio/anaconda3:latest
+
+# ~/docker/anaconda3/docker/parameters以下のファイルをコンテナ内に複製する。
+COPY parameters/* /tmp/
+
+# Pullしたイメージに対し、Tensor-FlowのインストールやJupyterLabの設定を行う。
+RUN set -x \
+  && : "Conda Update" \
+  && conda update -n base conda \
+  && : "Virtual Environment Create" \
+  && conda create -n tensorflow-env python=3.6 \
+  && : "Switching Virtual Environment" \
+  && . activate tensorflow-env \
+  && : "TensorFlow Install" \
+  && conda install tensorflow \
+  && : "Create Directories" \
+  && mkdir -p /root/.jupyter/lab/user-settings/@jupyterlab/apputils-extension \
+  && mkdir -p /root/.jupyter/lab/user-settings/@jupyterlab/notebook-extension \
+  && mkdir -p /root/.jupyter/lab/user-settings/@jupyterlab/codemirror-extension \
+  && mkdir -p /root/.jupyter/lab/user-settings/@jupyterlab/extensionmanager-extension \
+  && : "Create Setting Files" \
+  && cat /tmp/apputils | tee /root/.jupyter/lab/user-settings/@jupyterlab/apputils-extension/themes.jupyterlab-settings \
+  && cat /tmp/notebook | tee /root/.jupyter/lab/user-settings/@jupyterlab/notebook-extension/tracker.jupyterlab-settings \
+  && cat /tmp/codemirror | tee /root/.jupyter/lab/user-settings/@jupyterlab/codemirror-extension/commands.jupyterlab-settings \
+  && cat /tmp/extensionmanager | tee /root/.jupyter/lab/user-settings/@jupyterlab/extensionmanager-extension/plugin.jupyterlab-settings \
+  && : "Nodejs Install" \
+  && curl -sL https://deb.nodesource.com/setup_12.x | bash - \
+  && apt install nodejs \
+  && : "Extensions Install" \
+  && pip install jupyter-tensorboard \
+  && pip install black==18.9b0 \
+  && pip install jupyterlab_code_formatter \
+  && cat /tmp/extensions | xargs -I % jupyter labextension install % \
+  && jupyter serverextension enable --py jupyterlab_code_formatter
+
+#datasxience module
+RUN pip install missingno\
+    plotly\
+    lightgbm\
+    cufflinks\
+    pandas-profiling
+
+# コンテナ内にディレクトリを作成する。
+VOLUME /data
+
+# 8888番ポートをコンテナ外に公開する。
+EXPOSE 8888
+
+# コンテナ起動時に実行されるコマンドを定義する。
+CMD jupyter notebook --notebook-dir=/data/notebooks --ip=0.0.0.0 --port=8888 --no-browser --allow-root
